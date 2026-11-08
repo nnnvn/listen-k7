@@ -1,17 +1,35 @@
 # -*- coding: utf-8 -*-
-"""《守听》引擎。玩家不需要读这个文件；打包后由 listen.py 调用。"""
+"""《守听》引擎。
+
+这个文件只有逻辑：读指令、推时间、抽事件、存读档。它不含任何剧情或掉率。
+文字内容（物品、地点、事件、结局）是纯数据，在打包后的 listen.py 里以
+zlib + base64 的形式藏在 _DATA 里，通过 json.loads 读进来，**没有任何 exec**。
+"""
 import json
 import os
 import random
 import shutil
 
+DATA_NAMES = ("TITLE", "INTRO", "ITEMS", "TOOL_DUR", "LOCS", "WINDOWS", "WEATHER",
+              "RECIPES", "SHOP", "PAGES", "EVENTS", "ACH", "SECRETS", "HELP",
+              "BAG_MAX")
+
+
+def load_content(d):
+    """把一份数据字典挂到本模块的全局变量上。"""
+    globals().update(d)
+
+
+# --- dev content import（build.py 会删掉这一段）---
 try:
-    from content import *          # 开发时；打包后内容已在本命名空间
+    import content as _c
+    load_content({k: getattr(_c, k) for k in DATA_NAMES if hasattr(_c, k)})
 except Exception:
     pass
+# --- end dev content import ---
 
 SAVE = os.environ.get("LISTEN_SAVE", "listen_save.json")
-BAG_MAX = 60
+BAG_MAX = globals().get("BAG_MAX", 60)
 
 
 def _new_state(seed=None):

@@ -1,22 +1,25 @@
 # -*- coding: utf-8 -*-
 """自动试玩：一个目标驱动的机器人，验证《守听》能从开局走到结局。
-用法：python tests/playtest.py"""
-import sys, os
+
+    python tests/playtest.py                     # 测开发版（engine + content）
+    LISTEN_MOD=listen python tests/playtest.py   # 测打包后的单文件
+"""
+import sys, os, importlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.stdout.reconfigure(encoding="utf-8")
 os.environ["LISTEN_SAVE"] = "playtest_save.json"
-import engine
+mod = importlib.import_module(os.environ.get("LISTEN_MOD", "engine"))
 
 if os.path.exists("playtest_save.json"):
     os.remove("playtest_save.json")
-engine.new_game(seed=11, force=True)
+mod.new_game(seed=11, force=True)
 
-S = lambda: engine._G.st
+S = lambda: mod._G.st
 def n(i): return S()["bag"].get(i, 0)
 def T(): return S()["tools"]
 def has(t): return t in T()
-def go(c): return engine.cmd(c)
-PRICE = dict(engine.SHOP)
+def go(c): return mod.cmd(c)
+PRICE = dict(mod.SHOP)
 steps = [0]
 
 def log(msg):
@@ -96,13 +99,14 @@ while steps[0] < 400:
         continue
 
     ensure_at("hab")
-    if engine._G.window():
+    if mod._G.window():
         r = go("listen")
         log("listen -> " + (r.splitlines()[0][:34] if r else ""))
     else:
         go("wait 2"); log("wait")
 
 print("--- done ---")
-print(engine.cmd("status"))
-print(engine.cmd("achievements"))
-print(engine.cmd("secrets"))
+print(mod.cmd("status"))
+print(mod.cmd("achievements"))
+print(mod.cmd("secrets"))
+print("ENDING:", S().get("ending"))
