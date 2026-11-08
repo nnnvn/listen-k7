@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*_save.json
+*_save.json.bak
+dist_test/
+.gitconfig
