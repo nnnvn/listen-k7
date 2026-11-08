@@ -16,8 +16,11 @@ DATA_NAMES = ("TITLE", "INTRO", "ITEMS", "TOOL_DUR", "LOCS", "WINDOWS", "WEATHER
 
 
 def load_content(d):
-    """把一份数据字典挂到本模块的全局变量上。"""
-    globals().update(d)
+    """把一份数据字典挂到本模块的全局变量上。
+
+    只接受 DATA_NAMES 里列出的名字，其余一律忽略——数据不能覆盖引擎函数。
+    """
+    globals().update({k: v for k, v in d.items() if k in DATA_NAMES})
 
 
 # --- dev content import（build.py 会删掉这一段）---
@@ -123,6 +126,17 @@ class Game:
             self.st["bag"][i] = c - k
         return True
 
+    @staticmethod
+    def _qty(arg):
+        """buy/sell 的数量：省略时为 1；不是正整数时返回 None。"""
+        if len(arg) < 2:
+            return 1
+        try:
+            n = int(arg[1])
+        except Exception:
+            return None
+        return n if n >= 1 else None
+
     # ── 时间 ────────────────────────────────────
     def window(self):
         return self.st["hour"] in WINDOWS
@@ -224,8 +238,6 @@ class Game:
     def apply(self, out):
         if not out:
             return
-        if out.get("reset"):
-            pass
         if "chance" in out:
             r = self.rng()
             pick = out["chance"]["ok"] if r.random() < out["chance"]["p"] else out["chance"]["fail"]
@@ -407,7 +419,7 @@ class Game:
         elif not self.st["flags"].get("decoded"):
             L.append(" · 十四秒里有人说话，静电太厚。需要一个滤波器（craft filterbox）。")
         elif not self.st["ending"]:
-            L.append(" · 你听清了。要回答吗？（再 listen 一次）")
+            L.append(PAGES["q_after_decode"])
         if "bay" in self.st["unlocked"]:
             L.append(" · 塔基下面那扇门开着。")
         if len(self.st["secrets"]) < len(SECRETS):
@@ -475,9 +487,11 @@ class Game:
                 total[k] = total.get(k, 0) + v
             L.append("— 第%d次 —" % i)
             if not got:
-                L.append(random.choice(["（翻了半天，只找到一个你自己留下的脚印。）",
-                                        "（今天这里什么都没有。）",
-                                        "（空手而归。你坐着看了一会儿。）"]))
+                r = self.rng()
+                L.append(r.choice(["（翻了半天，只找到一个你自己留下的脚印。）",
+                                   "（今天这里什么都没有。）",
+                                   "（空手而归。你坐着看了一会儿。）"]))
+                self.save_rng(r)
             ev = self.roll_event(loc)
             if ev:
                 mark = len(self.out)
@@ -559,16 +573,17 @@ class Game:
         if not arg:
             return "用法：buy <物品> [数量]"
         k = arg[0]
-        try:
-            n = int(arg[1]) if len(arg) > 1 else 1
-        except Exception:
-            n = 1
+        n = self._qty(arg)
+        if n is None:
+            return "数量要是正整数。"
         price = dict(SHOP).get(k)
         if price is None:
             return "备件柜里没有这个。"
         p = price * n
         if self.st["credits"] < p:
             return "配额不够（需要 %d，有 %d）。" % (p, self.st["credits"])
+        if k not in TOOL_DUR and sum(self.st["bag"].values()) + n > BAG_MAX:
+            return "🎒 背包装不下（还剩 %d 格）。" % (BAG_MAX - sum(self.st["bag"].values()))
         self.st["credits"] -= p
         self.add(k, n)
         return "买了 %s×%d，花 %d。" % (ITEMS[k][0], n, p)
@@ -579,13 +594,14 @@ class Game:
         if arg[0] in ("junk", "零碎"):
             return self.sell_junk()
         k = arg[0]
-        try:
-            n = int(arg[1]) if len(arg) > 1 else 1
-        except Exception:
-            n = 1
+        n = self._qty(arg)
+        if n is None:
+            return "数量要是正整数。"
         c = self.n(k)
         if c <= 0:
             return "背包里没有这个。"
+        if ITEMS[k][1] == "story":
+            return "这个不卖。"
         n = min(n, c)
         self.take(k, n)
         self.st["credits"] += ITEMS[k][2] * n
@@ -679,7 +695,8 @@ class Game:
             c = self.n("logpage")
             if c <= 0:
                 return "你还没有日志页。"
-            idx = min(3, self.st["flags"].get("log_read", 0) + 1)
+            # 有几页才能读到第几页：一张纸不能读出三页内容
+            idx = min(3, c, self.st["flags"].get("log_read", 0) + 1)
             self.st["flags"]["log_read"] = idx
             return PAGES["log%d" % idx]
         for f, t in (("ration", 20), ("water", 12)):
@@ -726,16 +743,13 @@ class Game:
                         "但静电太厚，一个字也抓不住。也许需要一个滤波器（craft filterbox）。")
             self.st["flags"]["decoded"] = True
             self.secret("signal_full")
-            self.j("用滤波器听清了十四秒。是林郁的声音。")
+            self.j(PAGES["j_decoded"])
             return PAGES["signal"]
         return self.finale()
 
+    # 结局相关的文字都在 PAGES 里（打包后在 _DATA 中），引擎只认 key
     def finale(self):
-        self.say("❗【事件】十四秒又来了。这一次你听得很清楚，清楚到能听见她换气。")
-        self.say("　　　发射键就在手边。")
-        self.say("  1. 把这段话发回去")
-        self.say("  2. 让它继续循环，什么也不改")
-        self.say("  3. 关掉它")
+        self.say(PAGES["finale"])
         self.say("（用 choose <编号> 做决定）")
         self.st["pending"] = "choose"
         self.st["pending_ev"] = "_finale"
@@ -747,13 +761,9 @@ class Game:
         self.st["pending"] = None
         self.st["pending_ev"] = None
         self.say(PAGES["end_" + key])
-        self.j({"send": "我把那十四秒发了回去。第三个窗口，回波多了三秒。",
-                "keep": "我什么也没改。灯亮着，没有人回答，也很好。",
-                "off": "我关掉了它。任务结束。"}[key])
+        self.j(PAGES["j_end_" + key])
         self.ach("ending")
-        self.save()
-        self.out.append(self.bar())
-        return "\n".join([x for x in self.out if x != ""])
+        return ""   # 存档和状态栏由 cmd() 统一处理
 
     def choose(self, arg):
         if self.st.get("pending_ev") == "_finale":
@@ -785,10 +795,9 @@ class Game:
             self.use_tool(o["tool"])
         self.st["pending"] = None
         self.st["pending_ev"] = None
-        out = o.get("out") or {}
-        mark = len(self.out)
-        self.apply(out)
-        return "\n".join([x for x in self.out[mark:] if x])
+        # apply() 已经把文字写进 self.out，这里不再返回一遍，否则会打印两次
+        self.apply(o.get("out") or {})
+        return ""
 
 
 _G = None

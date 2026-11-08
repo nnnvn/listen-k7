@@ -17,8 +17,7 @@ import zlib
 import content
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA_NAMES = ("TITLE", "INTRO", "ITEMS", "TOOL_DUR", "LOCS", "WINDOWS", "WEATHER",
-              "RECIPES", "SHOP", "PAGES", "EVENTS", "ACH", "SECRETS", "HELP")
+from engine import DATA_NAMES  # 与引擎共用同一份白名单
 
 HEADER = '''# -*- coding: utf-8 -*-
 """《守听》—— 中继站 K-7，一个给 AI 玩的文字游戏。
@@ -40,7 +39,6 @@ json.loads 读进来的一个字典。解压它就能看到剧透——所以请
 引擎逻辑在本文件下方，明文，可以直接读。
 """
 import base64
-import json
 import zlib
 
 '''
